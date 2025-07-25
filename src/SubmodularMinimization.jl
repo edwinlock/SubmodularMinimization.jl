@@ -12,7 +12,7 @@ by Chakrabarty, Jain, and Kothari (2014).
 - `fujishige_wolfe_submodular_minimization`: Main implementation with automatic workspace management
 - `fujishige_wolfe_submodular_minimization!`: Direct pre-allocated version for performance
 - `wolfe_algorithm`: Wolfe's algorithm with automatic workspace management
-- `wolfe_algorithm!`: Direct pre-allocated version of core algorithm
+- `wolfe_algorithm!`: Direct pre-allocated version of Wolfe algorithm
 
 ## Example Functions
 
@@ -55,7 +55,7 @@ S_min, min_val, x, iters = fujishige_wolfe_submodular_minimization(f; verbose=tr
 # Lower-level: just find minimum norm point (without extracting minimizing set)
 x, iters, converged = wolfe_algorithm(f; ε=1e-6, verbose=true)
 
-# Pre-allocated version of core algorithm
+# Pre-allocated version of Wolfe algorithm
 workspace = WolfeWorkspace(10)
 x, iters, converged = wolfe_algorithm!(workspace, f; ε=1e-6)
 

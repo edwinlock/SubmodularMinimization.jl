@@ -868,27 +868,4 @@ end
 4. **Frank, Wolfe (1956)**: "An algorithm for quadratic programming"
 5. **Lovász (1983)**: "Submodular functions and convexity"
 
----
-
-## Implementation Notes
-
-### Complexity Analysis
-
-- **Time Complexity**: O(n³ T) per iteration, where T is function evaluation time
-- **Space Complexity**: O(n² + k) where k is the number of active vertices
-- **Convergence Rate**: O(1/ε) iterations for ε-optimal solution
-
-### Platform Considerations
-
-- **Julia Version**: Requires Julia ≥ 1.6 for LinearAlgebra improvements
-- **BLAS Library**: Performance depends on BLAS implementation (MKL, OpenBLAS, etc.)
-- **Threading**: Function evaluations can be parallelized for batch processing
-
-### Future Enhancements
-
-1. **GPU Acceleration**: CUDA.jl integration for large-scale problems
-2. **Parallel Algorithms**: Multi-threaded vertex generation
-3. **Approximate Methods**: Faster approximate algorithms for very large instances
-4. **Specialized Oracles**: Custom oracles for specific function classes
-
 This implementation represents the state-of-the-art in submodular minimization, combining theoretical rigor with practical performance optimizations for real-world applications.

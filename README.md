@@ -42,7 +42,7 @@ The package provides multiple interfaces for different use cases:
 |----------|-------------|----------|
 | `fujishige_wolfe_submodular_minimization()` | Complete submodular minimization with automatic workspace | General use, convenient interface |
 | `fujishige_wolfe_submodular_minimization!()` | Pre-allocated workspace version | Performance-critical, minimal allocations |  
-| `wolfe_algorithm()` / `wolfe_algorithm!()` | Core Wolfe algorithm for any polytope | Custom oracles, general convex optimization |
+| `wolfe_algorithm()` / `wolfe_algorithm!()` | Wolfe algorithm for any polytope | Custom oracles, general convex optimization |
 | `brute_force_minimization()` | Exhaustive search (2^n evaluations) | Testing, verification (n ≤ 20) |
 
 ### Choosing the Right Function

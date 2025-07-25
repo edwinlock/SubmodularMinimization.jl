@@ -1,7 +1,7 @@
 """
 Fujishige-Wolfe Algorithm Implementation
 
-This module contains the core Wolfe's algorithm and the complete
+This module contains Wolfe's algorithm and the complete
 Fujishige-Wolfe submodular function minimization algorithm.
 """
 
