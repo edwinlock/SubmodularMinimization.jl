@@ -5,13 +5,13 @@ A Julia package for submodular function minimization using the Fujishige-Wolfe a
 
 This implementation follows the algorithm described in:
 "Provable Submodular Minimization using Wolfe's Algorithm"
-by Chakrabarty, Jain, and Kothari (2014)
+by Chakrabarty, Jain, and Kothari (2014).
 
 ## Main Functions
 
 - `fujishige_wolfe_submodular_minimization`: Main implementation with automatic workspace management
 - `fujishige_wolfe_submodular_minimization!`: Direct pre-allocated version for performance
-- `wolfe_algorithm`: Core Wolfe's algorithm with automatic workspace management
+- `wolfe_algorithm`: Wolfe's algorithm with automatic workspace management
 - `wolfe_algorithm!`: Direct pre-allocated version of core algorithm
 
 ## Example Functions

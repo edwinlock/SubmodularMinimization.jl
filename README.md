@@ -34,6 +34,24 @@ workspace = WolfeWorkspace(10)
 S_min, min_val, x, iterations = fujishige_wolfe_submodular_minimization!(workspace, f)
 ```
 
+## Algorithm Variants
+
+The package provides multiple interfaces for different use cases:
+
+| Function | Description | Use Case |
+|----------|-------------|----------|
+| `fujishige_wolfe_submodular_minimization()` | Complete submodular minimization with automatic workspace | General use, convenient interface |
+| `fujishige_wolfe_submodular_minimization!()` | Pre-allocated workspace version | Performance-critical, minimal allocations |  
+| `wolfe_algorithm()` / `wolfe_algorithm!()` | Core Wolfe algorithm for any polytope | Custom oracles, general convex optimization |
+| `brute_force_minimization()` | Exhaustive search (2^n evaluations) | Testing, verification (n ≤ 20) |
+
+### Choosing the Right Function
+
+- **First-time users**: Start with `fujishige_wolfe_submodular_minimization()`
+- **Performance-critical code**: Use `fujishige_wolfe_submodular_minimization!()`  
+- **Custom polytopes**: Use `wolfe_algorithm()` with your own linear oracle
+- **Verification**: Use `brute_force_minimization()` for small problems (n ≤ 15)
+
 ## Tolerances
 
 The package provides standardized tolerance constants for consistent numerical behavior:
@@ -59,31 +77,185 @@ julia -e "include(\"performance_analysis.jl\"); main()"
 
 ## Example Functions
 
-The package includes many common submodular functions, all normalized so that f(∅) = 0:
+The package includes a comprehensive collection of submodular functions covering major application areas, all normalized so that f(∅) = 0:
+
+### Basic Mathematical Functions
 
 ```julia
-# Basic functions
-f1 = ConcaveSubmodularFunction(10, 0.7)  # f(S) = |S|^α
-f2 = SquareRootFunction(8)               # f(S) = √|S|
-f3 = MatroidRankFunction(10, 5)          # f(S) = min(|S|, k)
+# Concave functions: f(S) = |S|^α (0 < α < 1)
+f1 = ConcaveSubmodularFunction(10, 0.7)
 
-# Graph-based functions
-edges = [(1,2), (2,3), (3,4), (1,4)]
-f4 = CutFunction(4, edges)               # Graph cut function
-f5 = create_random_cut_function(15, 0.3) # Random graph cuts
+# Square root function: f(S) = √|S|
+f2 = SquareRootFunction(8)
 
-# Machine learning functions
-weights = rand(5, 8)  # 5 customers, 8 facilities
-f6 = FacilityLocationFunction(8, weights)           # Facility location
-f7 = create_random_facility_location(10, 4)        # Random version
-
-# Information theory
-f8 = create_random_entropy_function(6, 4)          # Entropy-based
-f9 = create_wishart_log_determinant(5)             # Log-determinant
-
-# Combinatorial optimization  
-f10 = create_random_coverage_function(8, 12)       # Weighted coverage
+# Matroid rank function: f(S) = min(|S|, k)
+f3 = MatroidRankFunction(10, 5)
 ```
+
+### Graph Theory Functions
+
+```julia
+# Cut functions (graph partitioning)
+edges = [(1,2), (2,3), (3,4), (1,4)]
+f4 = CutFunction(4, edges)
+f5 = create_random_cut_function(15, 0.3)
+
+# Asymmetric cut functions (directional penalties)
+f6 = create_asymmetric_cut(8, 0.4, 2.5)
+
+# Bipartite matching functions
+f7 = create_bipartite_matching(5, 6, 0.4)
+```
+
+### Machine Learning & Optimization
+
+```julia
+# Facility location (service optimization)
+f8 = create_random_facility_location(10, 8)
+weights = rand(5, 8)  # Custom weights
+f9 = FacilityLocationFunction(8, weights)
+
+# Weighted coverage (set cover variants)
+f10 = create_random_coverage_function(8, 12)
+
+# Feature selection (mutual information-based)
+f11 = create_feature_selection(10; correlation_strength=0.4, α=0.6)
+
+# Diversity maximization (recommendation systems)
+f12 = create_diversity_function(8; similarity_strength=0.3)
+```
+
+### Information Theory & Experimental Design
+
+```julia
+# Entropy functions (information selection)
+f13 = create_random_entropy_function(6, 4)
+
+# Log-determinant functions (optimal experimental design)
+f14 = create_wishart_log_determinant(5)
+
+# Information gain (active learning)
+f15 = create_information_gain(8; correlation_strength=0.3, decay=0.4)
+
+# Sensor placement (monitoring networks)
+f16 = create_sensor_placement(10, 15; coverage_prob=0.3)
+```
+
+### Computer Vision & AI
+
+```julia
+# Image segmentation (graph-based)
+f17 = create_image_segmentation(12; edge_density=0.3, λ=1.0)
+
+# Feature selection for ML
+f18 = create_feature_selection(8; correlation_strength=0.5, α=0.6)
+```
+
+### Economics & Auction Theory
+
+```julia
+# Gross substitutes (auction theory)
+f19 = create_gross_substitutes(6; substitutability_strength=0.3)
+
+# Auction revenue optimization
+f20 = create_auction_revenue(8, 5; competition_strength=0.2)
+
+# Market share functions (product portfolios)  
+f21 = create_market_share(6, 8; cannibalization_strength=0.25)
+```
+
+### Advanced Specialized Functions
+
+```julia
+# Concave with penalty (avoiding trivial solutions)
+f22 = create_concave_with_penalty(8, 0.7, 3.0)
+
+# Custom functions - implement SubmodularFunction interface
+struct MyFunction <: SubmodularFunction
+    n::Int
+    parameters::MyParams
+end
+
+ground_set_size(f::MyFunction) = f.n
+evaluate(f::MyFunction, S::BitVector) = my_computation(S, f.parameters)
+```
+
+All functions support the same interface and can be used interchangeably with the optimization algorithms.
+
+## Direct Use of Wolfe's Algorithm
+
+Beyond submodular minimization, this package provides direct access to **Wolfe's algorithm** for finding the minimum norm point in any convex polytope defined by a linear optimization oracle. This is useful for general convex optimization problems.
+
+### Basic Wolfe Algorithm Usage
+
+```julia
+# Define your linear optimization oracle
+function my_linear_oracle(c::Vector{Float64})
+    # Return vertex v of your polytope that minimizes dot(c, v)
+    # This is problem-specific - examples:
+    # - For base polytope: use greedy algorithm on submodular function
+    # - For simplex: return standard basis vector
+    # - For flow polytope: solve min-cost flow
+    return vertex
+end
+
+# Find minimum norm point in polytope
+x, iterations, converged = wolfe_algorithm(my_linear_oracle, n; ε=1e-6)
+```
+
+### Pre-allocated Version for Performance
+
+```julia
+# Create workspace for repeated use
+workspace = WolfeWorkspace(n)
+
+# Efficient version with minimal allocations
+x, iterations, converged = wolfe_algorithm!(workspace, my_linear_oracle; ε=1e-6)
+```
+
+### Example: Minimum Norm Point in Simplex
+
+```julia
+using SubmodularMinimization
+
+# Linear oracle for standard simplex {x: x ≥ 0, sum(x) = 1}
+function simplex_oracle(c::Vector{Float64})
+    # Return vertex e_i where i = argmin c_i
+    i_min = argmin(c)
+    vertex = zeros(length(c))
+    vertex[i_min] = 1.0
+    return vertex
+end
+
+# Find minimum norm point in simplex
+n = 5
+x, iters, converged = wolfe_algorithm(simplex_oracle, n)
+println("Minimum norm point: $x")
+println("Norm: $(norm(x))")
+println("Converged in $iters iterations")
+```
+
+### Example: Flow Polytope
+
+```julia
+# For network flow problems
+function flow_oracle(c::Vector{Float64})
+    # Solve min-cost flow problem: min c'x subject to Ax = b, x ≥ 0
+    # Return extreme point of flow polytope
+    # (Implementation depends on your specific network)
+    return extreme_flow_point
+end
+
+x_min_norm = wolfe_algorithm(flow_oracle, num_edges)[1]
+```
+
+### Algorithm Properties
+
+- **Convergence Rate**: O(1/ε) iterations for ε-optimal solution
+- **Memory**: O(n²) for storing active vertices (configurable)
+- **Numerical Stability**: Built-in safeguards for ill-conditioned problems
+
+This makes the package useful for a much broader class of optimization problems beyond submodular functions.
 
 ## Advanced Usage
 
@@ -115,14 +287,14 @@ SubmodularMinimization.jl/
 │   ├── oracles.jl                        # Linear optimization and affine minimization
 │   ├── algorithms.jl                     # Fujishige-Wolfe implementation
 │   └── utils.jl                          # Utilities and testing functions
-├── test/                                  # Comprehensive test suite (885 tests)
+├── test/                                  # Comprehensive test suite (969 tests)
 └── test_verbose.jl                       # Verbose test runner
 ```
 
 ## Testing
 
 ```bash
-# Run full test suite (885 tests)
+# Run full test suite (969 tests)
 julia test/runtests.jl
 
 # Verbose testing with progress output
@@ -154,7 +326,7 @@ If you use this package in your research, please refer to this GitHub repository
 Contributions are welcome! Please see our contributing guidelines and ensure all tests pass:
 
 ```bash
-julia test/runtests.jl      # All 885 tests must pass
+julia test/runtests.jl      # All 969 tests must pass
 julia performance_analysis.jl  # Performance regression check
 ```
 
@@ -164,4 +336,4 @@ MIT License - see LICENSE file for details.
 
 ---
 
-For detailed algorithmic documentation, implementation details, and theoretical background, see [README.txt](README.txt).
+For detailed algorithmic documentation, implementation details, and theoretical background, see [DETAILS.md](DETAILS.md).
