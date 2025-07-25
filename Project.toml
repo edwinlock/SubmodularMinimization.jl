@@ -1,0 +1,11 @@
+name = "SubmodularMinimization"
+uuid = "59f1d091-5554-4fa8-90cd-9fd77f0a6d26"
+authors = ["Edwin Lock <mail@edwinlock.com>"]
+version = "0.1.0"
+
+[deps]
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+
+[compat]
+julia = "1.6"
