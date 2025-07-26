@@ -423,7 +423,7 @@ julia performance_analysis.jl  # Performance regression check
 
 ## License
 
-MIT License - see LICENSE file for details.
+GPLv3 License.
 
 ---
 
