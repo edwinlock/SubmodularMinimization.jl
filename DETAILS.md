@@ -12,7 +12,8 @@
 8. [Memory Management](#memory-management)
 9. [Testing Framework](#testing-framework)
 10. [Example Functions](#example-functions)
-11. [Advanced Usage](#advanced-usage)
+11. [Python Wrapper Architecture](#python-wrapper-architecture)
+12. [Advanced Usage](#advanced-usage)
 
 ---
 
@@ -471,26 +472,54 @@ adaptive_tolerance = max(ε, gap / 1000)
 
 ### 4. Function Evaluation Caching
 
-**Evaluation Cache**: Store recently computed function values:
+**Selective Caching Strategy**: Caching is disabled by default in Julia algorithms but enabled for specific use cases:
+
+```julia
+# Default behavior (no caching overhead)
+fujishige_wolfe_submodular_minimization(f; cache=false)  # Julia default
+
+# Enable caching for expensive functions or Python interop
+fujishige_wolfe_submodular_minimization(f; cache=true)   # Explicit enable
+
+# Always cache for exponential-complexity functions
+is_submodular(f; cache=true)  # O(n² × 2ⁿ) benefits from caching
+```
+
+**Caching Infrastructure**:
 ```julia
 mutable struct CachedSubmodularFunction{F} <: SubmodularFunction
     f::F
-    cache::LRU{BitVector, Float64}
-    cache_size::Int
+    cache::Dict{Vector{Int}, Float64}
+    max_cache_size::Int
+    stats::CacheStats
 end
 
 function evaluate(cf::CachedSubmodularFunction, S::BitVector)
-    get!(cf.cache, copy(S)) do
-        evaluate(cf.f, S)
+    key = findall(S)  # Convert to indices for hashing
+    
+    if haskey(cf.cache, key)
+        cf.stats.hits += 1
+        return cf.cache[key]
     end
+    
+    cf.stats.misses += 1
+    result = evaluate(cf.f, S)
+    
+    # Bounded cache with LRU eviction
+    if length(cf.cache) >= cf.max_cache_size && cf.max_cache_size > 0
+        evict_lru_entry!(cf.cache)
+    end
+    
+    cf.cache[copy(key)] = result
+    return result
 end
 ```
 
-**Marginal Value Caching**: Cache marginal contributions:
-```julia
-# Cache f(S ∪ {i}) - f(S) for frequently accessed marginals
-marginal_cache = Dict{Tuple{BitVector, Int}, Float64}()
-```
+**Performance Considerations**:
+- **Main algorithms**: Caching disabled by default (adds overhead without benefit)
+- **Verification functions**: Caching enabled by default (high redundancy in O(2ⁿ) checks)
+- **Python wrapper**: Caching enabled by default (reduces interop overhead)
+- **Custom thresholds**: Auto-recommendations based on problem characteristics
 
 ---
 
@@ -851,6 +880,389 @@ end
 ```
 
 **Applications**: Supply chain optimization, resource allocation, service network design.
+
+---
+
+## Python Wrapper Architecture
+
+### Overview
+
+The Python wrapper provides access to SubmodularMinimization.jl's high-performance algorithms through a C-compatible dynamic library created with PackageCompiler.jl. This approach combines Julia's computational performance with Python's ease of use.
+
+### Architecture Components
+
+```
+Python Layer
+    ↓ ctypes
+C Interface (@ccallable functions)
+    ↓ Julia FFI
+Julia Implementation
+    ↓ BLAS/LAPACK
+Native Libraries
+```
+
+### Build System: PackageCompiler.jl
+
+**Compilation Process**:
+```julia
+# build_python_library.jl
+using PackageCompiler
+
+create_library(
+    ".",  # Current package
+    "python_lib";
+    lib_name = "libsubmodular",
+    precompile_execution_file = "build_precompile.jl",
+    force = true
+)
+```
+
+**Precompilation Strategy**:
+```julia
+# Precompile common function types and sizes
+for n in [5, 10, 20, 50]
+    for alpha in [0.3, 0.5, 0.7, 0.9]
+        f = ConcaveSubmodularFunction(n, alpha)
+        fujishige_wolfe_submodular_minimization(f; ε=1e-4, verbose=false)
+        is_submodular(f; verbose=false)
+        is_minimiser(result.optimal_set, f; verbose=false)
+    end
+end
+```
+
+**Output Structure**:
+```
+python_lib/
+├── lib/
+│   ├── libsubmodular.so     # Linux shared library
+│   ├── libsubmodular.dylib  # macOS dynamic library  
+│   └── libsubmodular.dll    # Windows DLL
+└── include/
+    └── submodular_minimization.h  # C header file
+```
+
+### C Interface Layer
+
+**Function Signatures**:
+```c
+// Main algorithms
+int32_t fujishige_wolfe_solve_c(
+    int32_t func_type, double* params, int32_t n_params, int32_t n,
+    double tolerance, int32_t max_iterations,
+    int32_t** result_set, double* result_value, int32_t* result_iterations
+);
+
+int32_t wolfe_algorithm_c(
+    int32_t func_type, double* params, int32_t n_params, int32_t n,
+    double tolerance, int32_t max_iterations,
+    double** result_x, int32_t* result_iterations, int32_t* converged
+);
+
+// Verification functions
+int32_t check_submodular_c(
+    int32_t func_type, double* params, int32_t n_params, int32_t n,
+    int32_t* violations
+);
+
+int32_t is_minimiser_c(
+    int32_t func_type, double* params, int32_t n_params, int32_t n,
+    int32_t* candidate_set, int32_t set_size, double* improvement_value
+);
+```
+
+**Memory Management**:
+```julia
+# Julia allocates result arrays and returns pointers
+result_array = [Cint(idx - 1) for idx in selected_indices]  # 0-indexed for C
+unsafe_store!(result_set, pointer(result_array))
+
+# Python responsible for not accessing freed memory
+# GC handles deallocation automatically
+```
+
+**Error Handling**:
+```julia
+const SUCCESS = Cint(0)
+const ERROR_INVALID_FUNCTION_TYPE = Cint(-1)
+const ERROR_INVALID_PARAMETERS = Cint(-2)
+const ERROR_CONVERGENCE_FAILED = Cint(-3)
+const ERROR_MEMORY_ALLOCATION = Cint(-4)
+```
+
+### Python Object Model
+
+**Function Type Hierarchy**:
+```python
+class SubmodularFunction(ABC):
+    @property
+    @abstractmethod 
+    def func_type(self) -> int: pass
+    
+    @property
+    @abstractmethod
+    def parameters(self) -> List[float]: pass
+
+class ConcaveFunction(SubmodularFunction):
+    def __init__(self, n: int, alpha: float):
+        self.alpha = alpha
+    
+    @property
+    def func_type(self) -> int:
+        return 1  # FUNC_TYPE_CONCAVE
+    
+    @property 
+    def parameters(self) -> List[float]:
+        return [self.alpha]
+
+class CallbackFunction(SubmodularFunction):
+    def __init__(self, callback: Callable[[List[int]], float], n: int):
+        self.callback = callback
+        self._callback_wrapper = None
+    
+    def get_callback_wrapper(self):
+        CALLBACK_TYPE = ctypes.CFUNCTYPE(
+            ctypes.c_double, 
+            ctypes.POINTER(ctypes.c_int32), 
+            ctypes.c_int32
+        )
+        
+        def c_callback(indices_ptr, n_indices):
+            indices = [indices_ptr[i] for i in range(n_indices)]
+            return float(self.callback(indices))
+        
+        return CALLBACK_TYPE(c_callback)
+```
+
+**Result Types**:
+```python
+class SubmodularResult(NamedTuple):
+    optimal_set: List[int]
+    min_value: float
+    iterations: int
+    success: bool
+    error_message: str = ""
+
+class WolfeResult(NamedTuple):
+    min_norm_point: List[float]
+    iterations: int
+    converged: bool
+    success: bool
+    error_message: str = ""
+```
+
+### Memory Management and Performance
+
+**Index Convention Translation**:
+```python
+# Python uses 0-indexed, Julia uses 1-indexed
+# Conversion happens at C interface boundary
+
+# Python → Julia
+julia_indices = [idx + 1 for idx in python_indices]
+
+# Julia → Python  
+python_indices = [idx - 1 for idx in julia_indices]
+```
+
+**Caching Strategy**:
+```julia
+# Python wrapper enables caching by default
+fujishige_wolfe_submodular_minimization(f; cache=true)  # Python calls
+fujishige_wolfe_submodular_minimization(f; cache=false) # Julia calls
+
+# Callback-specific memoization
+const MEMOIZATION_CACHE = Dict{Vector{Int}, Float64}()
+
+function evaluate(f::CallbackSubmodularFunction, S::BitVector)
+    indices = [i - 1 for i in findall(S)]
+    
+    if haskey(MEMOIZATION_CACHE, indices)
+        CACHE_HITS[] += 1
+        return MEMOIZATION_CACHE[indices]
+    end
+    
+    CACHE_MISSES[] += 1
+    result = ccall(f.callback_ptr, Cdouble, (Ptr{Cint}, Cint), 
+                   indices_array, Cint(length(indices)))
+    
+    MEMOIZATION_CACHE[copy(indices)] = Float64(result)
+    return Float64(result)
+end
+```
+
+**Performance Optimizations**:
+- **Zero-copy data sharing** where possible via pointer passing
+- **Batch parameter marshaling** to minimize FFI overhead
+- **Automatic caching** for callback functions to reduce Python↔Julia transitions
+- **Pre-allocated result buffers** managed by Julia GC
+
+### Library Loading and Discovery
+
+**Automatic Library Detection**:
+```python
+def _load_library(self, library_path: Optional[str]):
+    if library_path is None:
+        candidates = [
+            "python_lib/lib/libsubmodular.so",    # Build output
+            "python_lib/lib/libsubmodular.dylib", # macOS
+            "python_lib/lib/libsubmodular.dll",   # Windows
+            "libsubmodular.so",                   # System path
+        ]
+        
+        for candidate in candidates:
+            if os.path.exists(candidate):
+                library_path = candidate
+                break
+        else:
+            raise FileNotFoundError("Library not found. Run: julia build_python_library.jl")
+    
+    self.lib = ctypes.CDLL(library_path)
+```
+
+**Environment Setup**:
+```bash
+# Required environment variables
+export LD_LIBRARY_PATH=$PWD/python_lib/lib:$LD_LIBRARY_PATH      # Linux
+export DYLD_LIBRARY_PATH=$PWD/python_lib/lib:$DYLD_LIBRARY_PATH  # macOS  
+export PATH=$PWD/python_lib/lib:$PATH                            # Windows
+```
+
+### Error Handling and Diagnostics
+
+**Comprehensive Error Messages**:
+```python
+def solve(self, func: SubmodularFunction, tolerance: float = 1e-6, 
+          max_iterations: int = 10000) -> SubmodularResult:
+    
+    set_size = self.lib.fujishige_wolfe_solve_c(...)
+    
+    if set_size < 0:
+        error_messages = {
+            self.ERROR_INVALID_FUNCTION_TYPE: "Invalid function type",
+            self.ERROR_INVALID_PARAMETERS: "Invalid parameters",
+            self.ERROR_CONVERGENCE_FAILED: "Algorithm convergence failed",
+            self.ERROR_MEMORY_ALLOCATION: "Memory allocation error"
+        }
+        return SubmodularResult(
+            optimal_set=[], min_value=float('nan'), iterations=0, 
+            success=False, 
+            error_message=error_messages.get(set_size, f"Unknown error: {set_size}")
+        )
+```
+
+**Cache Performance Monitoring**:
+```python
+def get_cache_stats(self):
+    hits = ctypes.c_int32()
+    misses = ctypes.c_int32() 
+    size = ctypes.c_int32()
+    
+    self.lib.get_cache_stats(ctypes.byref(hits), ctypes.byref(misses), ctypes.byref(size))
+    
+    total_calls = hits.value + misses.value
+    hit_rate = hits.value / total_calls if total_calls > 0 else 0.0
+    
+    return {
+        'cache_hits': hits.value,
+        'cache_misses': misses.value, 
+        'cache_size': size.value,
+        'hit_rate': hit_rate
+    }
+```
+
+### Testing Infrastructure
+
+**Multi-Language Test Suite**:
+```python
+# test_python_wrapper.py
+def test_fujishige_wolfe():
+    solver = SubmodularMinimizer()
+    
+    # Test concave function
+    result = solver.solve_concave(n=8, alpha=0.7, tolerance=1e-6)
+    assert result.success
+    assert result.min_value >= 0
+    assert len(result.optimal_set) <= 8
+    
+    # Test cut function
+    edges = [(0, 1), (1, 2), (2, 3), (0, 3)]
+    result = solver.solve_cut(n=4, edges=edges)
+    assert result.success
+    
+    # Test callback function
+    def custom_func(indices):
+        return len(indices) ** 0.6
+    
+    callback_func = solver.create_callback_function(custom_func, n=6)
+    result = solver.solve(callback_func)
+    assert result.success
+```
+
+**Performance Validation**:
+```python
+def benchmark_python_vs_julia():
+    # Compare Python wrapper performance to pure Julia
+    import time
+    
+    solver = SubmodularMinimizer()
+    func = solver.create_concave_function(n=20, alpha=0.7)
+    
+    # Python wrapper timing
+    start = time.time()
+    result = solver.solve(func)
+    python_time = time.time() - start
+    
+    # Verify performance is within 2x of Julia native
+    assert python_time < expected_julia_time * 2.0
+```
+
+### Integration Patterns
+
+**Jupyter Notebook Usage**:
+```python
+import numpy as np
+import matplotlib.pyplot as plt
+from submodular_minimization_python import SubmodularMinimizer
+
+solver = SubmodularMinimizer()
+
+# Interactive exploration
+for alpha in np.linspace(0.1, 0.9, 9):
+    func = solver.create_concave_function(n=10, alpha=alpha)
+    result = solver.solve(func)
+    plt.scatter(alpha, len(result.optimal_set))
+
+plt.xlabel('Alpha parameter')  
+plt.ylabel('Optimal set size')
+plt.title('Concave Function Optimization')
+plt.show()
+```
+
+**Scikit-learn Integration**:
+```python
+from sklearn.base import BaseEstimator
+from submodular_minimization_python import SubmodularMinimizer
+
+class SubmodularFeatureSelector(BaseEstimator):
+    def __init__(self, alpha=0.7, max_features=None):
+        self.alpha = alpha
+        self.max_features = max_features
+        self.solver = SubmodularMinimizer()
+    
+    def fit(self, X, y):
+        def feature_utility(feature_indices):
+            # Submodular utility based on feature correlation
+            return self._compute_submodular_utility(X[:, feature_indices], y)
+        
+        n_features = X.shape[1]
+        func = self.solver.create_callback_function(feature_utility, n_features)
+        result = self.solver.solve(func)
+        
+        self.selected_features_ = result.optimal_set
+        return self
+```
+
+This architecture provides a robust, high-performance bridge between Julia's computational capabilities and Python's ecosystem, maintaining the performance benefits of the original Julia implementation while offering the familiar Python interface that many data scientists and researchers prefer.
 
 ---
 

@@ -166,9 +166,9 @@ Base.@ccallable function fujishige_wolfe_solve_c(
         f = create_function_from_params(func_type, param_array, n)
         f === nothing && return ERROR_INVALID_FUNCTION_TYPE
         
-        # Solve
+        # Solve (enable caching for Python wrapper due to interop overhead)
         S_min, min_val, x, iterations = fujishige_wolfe_submodular_minimization(
-            f; ε=tolerance, max_iterations=Int(max_iterations), verbose=false
+            f; ε=tolerance, max_iterations=Int(max_iterations), verbose=false, cache=true
         )
         
         # Find indices of selected elements
@@ -240,9 +240,9 @@ Base.@ccallable function wolfe_algorithm_c(
         f = create_function_from_params(func_type, param_array, n)
         f === nothing && return ERROR_INVALID_FUNCTION_TYPE
         
-        # Run Wolfe algorithm
+        # Run Wolfe algorithm (enable caching for Python wrapper due to interop overhead)
         x, iterations, has_converged = wolfe_algorithm(
-            f; ε=tolerance, max_iterations=Int(max_iterations), verbose=false
+            f; ε=tolerance, max_iterations=Int(max_iterations), verbose=false, cache=true
         )
         
         # Allocate result array in Julia
@@ -284,8 +284,8 @@ Base.@ccallable function check_submodular_c(
         f = create_function_from_params(func_type, param_array, n)
         f === nothing && return ERROR_INVALID_FUNCTION_TYPE
         
-        # Check submodularity
-        is_sub, violation_count, total_tests = is_submodular(f; verbose=false)
+        # Check submodularity (enable caching for Python wrapper due to interop overhead)
+        is_sub, violation_count, total_tests = is_submodular(f; verbose=false, cache=true)
         
         # Store violation count
         unsafe_store!(violations, Cint(violation_count))
@@ -334,8 +334,8 @@ Base.@ccallable function is_minimiser_c(
             end
         end
         
-        # Check optimality
-        is_optimal, improvement, better_val = is_minimiser(S, f; verbose=false)
+        # Check optimality (enable caching for Python wrapper due to interop overhead)
+        is_optimal, improvement, better_val = is_minimiser(S, f; verbose=false, cache=true)
         
         # Store improvement value
         if !is_optimal && !isnan(better_val)

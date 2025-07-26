@@ -411,10 +411,118 @@ julia test_verbose.jl
 julia -e "using Pkg; Pkg.activate(\".\"); using Test; using SubmodularMinimization; include(\"test/test_algorithms.jl\")"
 ```
 
+## Python Wrapper
+
+SubmodularMinimization.jl includes a comprehensive Python wrapper that provides access to the high-performance Julia algorithms through a clean, object-oriented interface.
+
+### Setup and Installation
+
+**Requirements:**
+- Julia 1.6+
+- Python 3 with ctypes
+- PackageCompiler.jl (automatically installed)
+
+**Build the Dynamic Library:**
+```bash
+# Clone the repository
+git clone https://github.com/edwock/SubmodularMinimization.jl
+cd SubmodularMinimization.jl
+
+# Build the Python-compatible library (takes several minutes on first run)
+julia build_python_library.jl
+
+# Set library path environment variable
+export LD_LIBRARY_PATH=$(pwd)/python_lib/lib:$LD_LIBRARY_PATH    # Linux
+export DYLD_LIBRARY_PATH=$(pwd)/python_lib/lib:$DYLD_LIBRARY_PATH  # macOS
+```
+
+### Python API
+
+**Clean, Object-Oriented Interface:**
+```python
+from submodular_minimization_python import SubmodularMinimizer
+
+# Initialize solver (auto-detects library location)
+solver = SubmodularMinimizer()
+
+# Create function objects using factory methods
+concave_func = solver.create_concave_function(n=10, alpha=0.7)
+cut_func = solver.create_cut_function(n=4, edges=[(0,1), (1,2), (2,3), (0,3)])
+
+# Unified solving interface
+result = solver.solve(concave_func)
+print(f"Optimal set: {result.optimal_set}")
+print(f"Minimum value: {result.min_value}")
+print(f"Iterations: {result.iterations}")
+
+# Alternative algorithms
+wolfe_result = solver.wolfe_algorithm(concave_func)
+is_submodular = solver.check_submodular(concave_func)
+is_optimal = solver.check_optimality(concave_func, result.optimal_set)
+```
+
+**Supported Function Types:**
+- **ConcaveFunction**: f(S) = |S|^α
+- **CutFunction**: Graph cut functions
+- **SquareRootFunction**: f(S) = √|S|  
+- **MatroidFunction**: f(S) = min(|S|, k)
+- **BipartiteMatchingFunction**: Bipartite matching problems
+- **FacilityLocationFunction**: Facility location optimization
+- **CallbackFunction**: Custom Python functions with automatic caching
+
+**Python Callback Functions:**
+```python
+# Define custom submodular function in Python
+def my_function(subset_indices):
+    """Custom function: f(S) = |S|^0.6 + penalty for large sets"""
+    size = len(subset_indices)
+    return size**0.6 + max(0, size - 5) * 0.5
+
+# Create and solve
+custom_func = solver.create_callback_function(my_function, n=8)
+result = solver.solve(custom_func)
+
+# Cache performance monitoring
+stats = solver.get_cache_stats()
+print(f"Cache hit rate: {stats['hit_rate']:.1%}")
+```
+
+**Error Handling and Diagnostics:**
+```python
+result = solver.solve(my_function)
+if result.success:
+    print(f"Solution: {result.optimal_set}, Value: {result.min_value}")
+else:
+    print(f"Error: {result.error_message}")
+
+# Verify solution optimality
+opt_check = solver.check_optimality(my_function, result.optimal_set)
+print(f"Is optimal: {opt_check.is_optimal}")
+```
+
+**Performance Characteristics:**
+- **Automatic caching** enabled for Python wrapper (disabled by default in Julia)
+- **Zero-copy memory sharing** between Python and Julia where possible
+- **Comprehensive error handling** with detailed diagnostic messages
+- **Cache management** for callback functions to minimize Python↔Julia overhead
+
+### Testing the Python Wrapper
+
+```bash
+# Run the comprehensive test suite
+python3 test_python_wrapper.py
+
+# Run the interactive demo
+python3 submodular_minimization_python.py
+```
+
+The Python wrapper provides the same performance as native Julia code while offering a familiar Python interface for users who prefer Python over Julia.
+
 ## Dependencies
 
 - **LinearAlgebra**: Matrix operations and norms
 - **Random**: Random number generation for testing and examples
+- **PackageCompiler.jl**: For creating Python-compatible dynamic libraries (optional)
 
 ## Citation
 
