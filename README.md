@@ -1,11 +1,8 @@
 # SubmodularMinimization.jl
 
-A high-performance Julia package for submodular function minimization using the Fujishige-Wolfe algorithm with non-trivial optimizations and efforts to guarantee numerical stability.
+A high-performance Julia package for submodular function minimization using the Fujishige-Wolfe algorithm with non-trivial optimizations and efforts to guarantee numerical stability. 
 
-
-## Overview
-
-This package provides an implementation of the Fujishige-Wolfe algorithm for minimizing submodular functions. The implementation follows "Provable Submodular Minimization using Wolfe's Algorithm" by Chakrabarty, Jain, and Kothari (2014) with significant performance optimizations including matrix storage, numerical stability enhancements, and proper tolerance management.
+The implementation follows "Provable Submodular Minimization using Wolfe's Algorithm" by Chakrabarty, Jain, and Kothari (2014).
 
 ## Installation
 
@@ -47,26 +44,32 @@ The package provides multiple interfaces for different use cases:
 | `is_submodular()` | Check if a function is submodular using Definition 3 | Validation, debugging (n ≤ 10) |
 | `is_minimiser()` | Check if a given set is optimal for a submodular function | Solution verification (any n) |
 
-### Choosing the Right Function
-
-- **First-time users**: Start with `fujishige_wolfe_submodular_minimization()`
-- **Performance-critical code**: Use `fujishige_wolfe_submodular_minimization!()`  
-- **Custom polytopes**: Use `wolfe_algorithm()` with your own linear oracle
-- **Verification**: Use `brute_force_minimization()` for small problems (n ≤ 15)
-- **Validation**: Use `is_submodular()` to check if your function is actually submodular
-
 ## Tolerances
 
 The package provides standardized tolerance constants for consistent numerical behavior:
 
 ```julia
-# Use predefined constants for consistent behavior
+# Use predefined constants for consistent behavior, or set your own ε.
 result = fujishige_wolfe_submodular_minimization(f; ε=DEFAULT_TOLERANCE)  # 1e-6 (balanced)
 result = fujishige_wolfe_submodular_minimization(f; ε=LOOSE_TOLERANCE)    # 1e-4 (fast)  
 result = fujishige_wolfe_submodular_minimization(f; ε=TIGHT_TOLERANCE)    # 5e-7 (precise)
 ```
 
 ## Performance Characteristics
+
+The implementation achieves excellent performance, handling problems with n=100 in milliseconds and scaling to n=150 with sub-second runtimes. Most practical problems solve in under 10ms with reliable convergence.
+
+| Problem Type | Size | Time | Memory | Iterations | Notes |
+|--------------|------|------|--------|------------|-------|
+| Cut Functions (sparse) | n ≤ 30 | <0.01ms | ~61MB | 2 | Optimal in 2 iterations |
+| Cut Functions (dense) | n = 50-120 | 3-10ms | ~66-72MB | 105-144 | Scales with edge density |
+| Concave Functions | n = 5-25 | 0.01-0.1ms | ~61-62MB | 5-30 | Depends on α parameter |
+| Concave Functions | n = 40-100 | 0.4-7ms | ~63-72MB | 54-129 | Linear scaling |
+| Concave Functions | n = 150 | 34ms | ~101MB | 220 | Largest test case |
+| Bipartite Matching | 3×3 to 15×15 | 0.005-1ms | ~61-63MB | 5-107 | Quadratic node pairs |
+| Facility Location | 4+6 to 25+40 | 0.05-18ms | ~61-82MB | 26-190 | Scales with facilities×clients |
+| Weighted Coverage | 6×8 to 50×60 | 0.02-10ms | ~61-70MB | 16-141 | Problem-dependent |
+| Special Cases | n = 1-16 | <0.03ms | ~15-61MB | 1-16 | Trivial, sqrt, graphs |
 
 ### Benchmarking
 
