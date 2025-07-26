@@ -218,3 +218,250 @@ function test_implementation()
     
     return S_min, min_val
 end
+
+"""
+    is_submodular(f::SubmodularFunction; tolerance::Float64=COMPARISON_TOLERANCE, verbose::Bool=false)
+
+Check if a function is submodular using Definition 3 from Wikipedia.
+
+Definition 3: A function f is submodular if for every X ⊆ Ω and x1, x2 ∈ Ω ∖ X such that x1 ≠ x2:
+f(X ∪ {x1}) + f(X ∪ {x2}) ≥ f(X ∪ {x1, x2}) + f(X)
+
+This captures the "diminishing returns" property of submodular functions.
+
+## Arguments
+- `f`: The function to test for submodularity
+- `tolerance`: Numerical tolerance for the inequality check (default: COMPARISON_TOLERANCE)  
+- `verbose`: If true, prints detailed information about violations
+
+## Returns
+- `is_submodular`: Boolean indicating if the function is submodular
+- `violations`: Number of submodularity violations found
+- `total_tests`: Total number of submodularity tests performed
+
+## Example
+```julia
+f = ConcaveSubmodularFunction(4, 0.5)
+is_sub, violations, total = is_submodular(f; verbose=true)
+# Output: true, 0, 24
+
+# Feature Selection functions are typically NOT submodular
+f_feat = create_feature_selection(4)  
+is_sub, violations, total = is_submodular(f_feat; verbose=true)
+# Output: false, 24, 24 (all tests failed)
+```
+
+## Note
+This function has O(n² × 2ⁿ) complexity and is only practical for small n (≤ 10).
+For larger functions, consider sampling-based approaches.
+"""
+function is_submodular(f::SubmodularFunction; tolerance::Float64=COMPARISON_TOLERANCE, verbose::Bool=false)
+    n = ground_set_size(f)
+    
+    if n > 15
+        @warn "is_submodular() has O(n² × 2ⁿ) complexity. For n=$n, this requires $(n^2 * 2^n) operations. Consider n ≤ 10 for practical use."
+    end
+    
+    violations = 0
+    total_tests = 0
+    
+    if verbose
+        println("Checking submodularity using Definition 3...")
+        println("For every X ⊆ Ω and x1, x2 ∈ Ω ∖ X such that x1 ≠ x2:")
+        println("f(X ∪ {x1}) + f(X ∪ {x2}) ≥ f(X ∪ {x1, x2}) + f(X)")
+        println()
+    end
+    
+    # Iterate over all possible subsets X
+    for x_bits in 0:(2^n - 1)
+        X = BitVector([((x_bits >> (i-1)) & 1) == 1 for i in 1:n])
+        
+        # Find elements not in X
+        not_in_X = findall(.!X)
+        
+        # Check all pairs of elements not in X
+        for i in eachindex(not_in_X)
+            for j in (i+1):length(not_in_X)
+                x1, x2 = not_in_X[i], not_in_X[j]
+                
+                # Create the four sets needed for the inequality
+                X_union_x1 = copy(X)
+                X_union_x1[x1] = true
+                
+                X_union_x2 = copy(X)
+                X_union_x2[x2] = true
+                
+                X_union_x1_x2 = copy(X)
+                X_union_x1_x2[x1] = true
+                X_union_x1_x2[x2] = true
+                
+                # Evaluate the function on all four sets
+                f_X = evaluate(f, X)
+                f_X_x1 = evaluate(f, X_union_x1)
+                f_X_x2 = evaluate(f, X_union_x2)
+                f_X_x1_x2 = evaluate(f, X_union_x1_x2)
+                
+                # Check the submodularity inequality
+                left_side = f_X_x1 + f_X_x2
+                right_side = f_X_x1_x2 + f_X
+                
+                total_tests += 1
+                
+                # Check if inequality is violated
+                if left_side < right_side - tolerance
+                    violations += 1
+                    
+                    if verbose && violations ≤ 5  # Show first 5 violations
+                        println("VIOLATION $violations:")
+                        println("  X = $(findall(X)), x1 = $x1, x2 = $x2")
+                        println("  f(X) = $f_X")
+                        println("  f(X ∪ {x1}) = $f_X_x1")
+                        println("  f(X ∪ {x2}) = $f_X_x2")
+                        println("  f(X ∪ {x1,x2}) = $f_X_x1_x2")
+                        println("  Left side:  f(X ∪ {x1}) + f(X ∪ {x2}) = $left_side")
+                        println("  Right side: f(X ∪ {x1,x2}) + f(X) = $right_side")
+                        println("  Violation: $(left_side - right_side)")
+                        println()
+                    end
+                end
+            end
+        end
+    end
+    
+    is_submodular_result = (violations == 0)
+    
+    if verbose
+        println("Submodularity check completed:")
+        println("  Total tests: $total_tests")
+        println("  Violations: $violations")
+        println("  Success rate: $(round(100 * (total_tests - violations) / total_tests, digits=2))%")
+        println("  Result: $(is_submodular_result ? "SUBMODULAR ✓" : "NOT SUBMODULAR ✗")")
+    end
+    
+    return is_submodular_result, violations, total_tests
+end
+
+"""
+    is_minimiser(S::BitVector, f::SubmodularFunction; tolerance::Float64=COMPARISON_TOLERANCE, verbose::Bool=false)
+
+Check if a given set S is a global minimizer of submodular function f.
+
+For submodular functions, local optimality implies global optimality. A set S is optimal if and only if:
+1. f(S ∪ {v}) ≥ f(S) for all v ∉ S (no beneficial additions)
+2. f(S ∖ {v}) ≥ f(S) for all v ∈ S (no beneficial removals)
+
+## Arguments
+- `S`: Candidate minimizer set (as BitVector)
+- `f`: The submodular function to minimize
+- `tolerance`: Numerical tolerance for optimality check (default: COMPARISON_TOLERANCE)
+- `verbose`: If true, prints detailed information about violations
+
+## Returns
+- `is_optimal`: Boolean indicating if S is the global minimizer
+- `improvement_found`: If not optimal, describes the improvement found
+- `improvement_value`: The better function value found (if any)
+
+## Example
+```julia
+f = ConcaveSubmodularFunction(4, 0.5)
+S = falses(4)  # Empty set (should be optimal for concave functions)
+is_opt, improvement, better_val = is_minimiser(S, f; verbose=true)
+# Output: true, "", NaN
+
+# Test with suboptimal set
+S_bad = BitVector([true, true, false, false])
+is_opt, improvement, better_val = is_minimiser(S_bad, f; verbose=true) 
+# Output: false, "Can improve by removing element 1", 1.0
+```
+
+## Note
+This method assumes the function is submodular. For non-submodular functions,
+passing this test does not guarantee global optimality.
+"""
+function is_minimiser(S::BitVector, f::SubmodularFunction; tolerance::Float64=COMPARISON_TOLERANCE, verbose::Bool=false)
+    n = ground_set_size(f)
+    
+    if length(S) != n
+        error("Candidate set length $(length(S)) does not match ground set size $n")
+    end
+    
+    f_S = evaluate(f, S)
+    
+    if verbose
+        println("Checking optimality of set $(findall(S)) with value $f_S...")
+    end
+    
+    # Check if we can beneficially add any element not in S
+    for v in 1:n
+        if !S[v]  # v not in S
+            S_plus_v = copy(S)
+            S_plus_v[v] = true
+            f_S_plus_v = evaluate(f, S_plus_v)
+            
+            if f_S_plus_v < f_S - tolerance
+                improvement_msg = "Can improve by adding element $v"
+                if verbose
+                    println("  IMPROVEMENT FOUND: $improvement_msg")
+                    println("    f(S) = $f_S")
+                    println("    f(S ∪ {$v}) = $f_S_plus_v")
+                    println("    Improvement: $(f_S - f_S_plus_v)")
+                end
+                return false, improvement_msg, f_S_plus_v
+            end
+        end
+    end
+    
+    # Check if we can beneficially remove any element in S
+    for v in 1:n
+        if S[v]  # v in S
+            S_minus_v = copy(S)
+            S_minus_v[v] = false
+            f_S_minus_v = evaluate(f, S_minus_v)
+            
+            if f_S_minus_v < f_S - tolerance
+                improvement_msg = "Can improve by removing element $v"
+                if verbose
+                    println("  IMPROVEMENT FOUND: $improvement_msg")
+                    println("    f(S) = $f_S")
+                    println("    f(S ∖ {$v}) = $f_S_minus_v")
+                    println("    Improvement: $(f_S - f_S_minus_v)")
+                end
+                return false, improvement_msg, f_S_minus_v
+            end
+        end
+    end
+    
+    if verbose
+        println("  ✓ No improvements found - S is locally optimal")
+        println("  ✓ For submodular functions, local optimality ⟹ global optimality")
+    end
+    
+    return true, "", NaN
+end
+
+"""
+    is_minimiser(S::Vector{Int}, f::SubmodularFunction; kwargs...)
+
+Convenience method that accepts a vector of indices instead of a BitVector.
+
+## Example
+```julia
+f = ConcaveSubmodularFunction(4, 0.5)
+is_opt, improvement, better_val = is_minimiser(Int[], f)  # Empty set
+# Output: true, "", NaN
+
+is_opt, improvement, better_val = is_minimiser([1, 2], f)  # Set {1, 2}
+# Output: false, "Can improve by removing element 1", <better_value>
+```
+"""
+function is_minimiser(S_indices::Vector{Int}, f::SubmodularFunction; kwargs...)
+    n = ground_set_size(f)
+    S = falses(n)
+    for i in S_indices
+        if i < 1 || i > n
+            error("Index $i is out of bounds for ground set size $n")
+        end
+        S[i] = true
+    end
+    return is_minimiser(S, f; kwargs...)
+end

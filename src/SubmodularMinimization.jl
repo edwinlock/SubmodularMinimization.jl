@@ -160,7 +160,7 @@ export wolfe_algorithm!, fujishige_wolfe_submodular_minimization!
 
 # Export utilities
 export brute_force_minimization, brute_force_minimization_verbose, test_fujishige_wolfe
-export benchmark_implementation, test_implementation
+export benchmark_implementation, test_implementation, is_submodular, is_minimiser
 
 # Export tolerance constants
 export DEFAULT_TOLERANCE, LOOSE_TOLERANCE, TIGHT_TOLERANCE, COMPARISON_TOLERANCE, NUMERICAL_PRECISION_TOLERANCE

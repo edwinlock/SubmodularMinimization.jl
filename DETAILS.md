@@ -562,7 +562,95 @@ end
 
 ---
 
-## Testing Framework
+## Verification and Testing Tools
+
+### Submodularity Verification: `is_submodular()`
+
+The `is_submodular()` function implements Definition 3 of submodularity to verify whether a given function is actually submodular:
+
+```julia
+function is_submodular(f::SubmodularFunction; tolerance::Float64=COMPARISON_TOLERANCE, verbose::Bool=false)
+    n = ground_set_size(f)
+    violations = 0
+    total_tests = 0
+    
+    # Test all possible combinations using Definition 3:
+    # For all X ⊆ V and x1, x2 ∉ X with x1 ≠ x2:
+    # f(X ∪ {x1}) + f(X ∪ {x2}) ≥ f(X ∪ {x1, x2}) + f(X)
+    
+    for x_bits in 0:(2^n - 1)
+        X = BitVector([((x_bits >> (i-1)) & 1) == 1 for i in 1:n])
+        
+        for x1 in 1:n, x2 in (x1+1):n
+            if !X[x1] && !X[x2]  # Both elements not in X
+                X_x1 = copy(X); X_x1[x1] = true
+                X_x2 = copy(X); X_x2[x2] = true  
+                X_x1_x2 = copy(X); X_x1_x2[x1] = true; X_x1_x2[x2] = true
+                
+                lhs = evaluate(f, X_x1) + evaluate(f, X_x2)
+                rhs = evaluate(f, X_x1_x2) + evaluate(f, X)
+                
+                total_tests += 1
+                if lhs < rhs - tolerance
+                    violations += 1
+                    if verbose
+                        println("Violation: X=$(findall(X)), x1=$x1, x2=$x2")
+                        println("  LHS=$lhs, RHS=$rhs, diff=$(rhs-lhs)")
+                    end
+                end
+            end
+        end
+    end
+    
+    return violations == 0, violations, total_tests
+end
+```
+
+**Complexity**: O(n² × 2ⁿ) - only practical for n ≤ 10.
+
+### Optimality Verification: `is_minimiser()`
+
+The `is_minimiser()` function checks whether a given solution is optimal for a submodular function using local optimality conditions:
+
+```julia
+function is_minimiser(S::BitVector, f::SubmodularFunction; tolerance::Float64=COMPARISON_TOLERANCE, verbose::Bool=false)
+    n = ground_set_size(f)
+    current_value = evaluate(f, S)
+    
+    # For submodular functions: local optimality ⟹ global optimality
+    # Check all single-element additions and removals
+    
+    for i in 1:n
+        if S[i]  # Element i is in the set - try removing it
+            S_minus = copy(S)
+            S_minus[i] = false
+            new_value = evaluate(f, S_minus)
+            
+            if new_value < current_value - tolerance
+                return false, "removing element $i", new_value
+            end
+        else  # Element i is not in the set - try adding it
+            S_plus = copy(S)
+            S_plus[i] = true
+            new_value = evaluate(f, S_plus)
+            
+            if new_value < current_value - tolerance
+                return false, "adding element $i", new_value
+            end
+        end
+    end
+    
+    return true, "", NaN
+end
+```
+
+**Key Properties**:
+- **Complexity**: O(n) - scales linearly with problem size
+- **Theoretical Foundation**: For submodular functions, local optimality implies global optimality
+- **Practical**: Works for any problem size, unlike brute force verification
+- **Informative**: Provides specific improvement suggestions when solution is suboptimal
+
+### Testing Framework
 
 ### Test Categories
 

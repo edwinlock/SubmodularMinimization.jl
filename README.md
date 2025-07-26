@@ -44,6 +44,8 @@ The package provides multiple interfaces for different use cases:
 | `fujishige_wolfe_submodular_minimization!()` | Pre-allocated workspace version | Performance-critical, minimal allocations |  
 | `wolfe_algorithm()` / `wolfe_algorithm!()` | Wolfe algorithm for any polytope | Custom oracles, general convex optimization |
 | `brute_force_minimization()` | Exhaustive search (2^n evaluations) | Testing, verification (n ≤ 20) |
+| `is_submodular()` | Check if a function is submodular using Definition 3 | Validation, debugging (n ≤ 10) |
+| `is_minimiser()` | Check if a given set is optimal for a submodular function | Solution verification (any n) |
 
 ### Choosing the Right Function
 
@@ -51,6 +53,7 @@ The package provides multiple interfaces for different use cases:
 - **Performance-critical code**: Use `fujishige_wolfe_submodular_minimization!()`  
 - **Custom polytopes**: Use `wolfe_algorithm()` with your own linear oracle
 - **Verification**: Use `brute_force_minimization()` for small problems (n ≤ 15)
+- **Validation**: Use `is_submodular()` to check if your function is actually submodular
 
 ## Tolerances
 
@@ -73,6 +76,94 @@ julia performance_analysis.jl
 
 # Quick performance test
 julia -e "include(\"performance_analysis.jl\"); main()"
+```
+
+## Testing and Validation
+
+### Submodularity Verification
+
+Before applying the Fujishige-Wolfe algorithm, you should verify that your function is actually submodular. **Non-submodular functions will not be minimized correctly**, leading to suboptimal results.
+
+```julia
+# Check if a function is submodular
+f = ConcaveSubmodularFunction(4, 0.5)
+is_sub, violations, total_tests = is_submodular(f; verbose=true)
+println("Is submodular: $is_sub")  # Output: true
+
+# Feature Selection functions are typically NOT submodular
+f_feat = create_feature_selection(4)
+is_sub, violations, total_tests = is_submodular(f_feat; verbose=true) 
+println("Is submodular: $is_sub")  # Output: false (all tests failed)
+
+# Check without verbose output
+is_sub, violations, total_tests = is_submodular(f)
+if !is_sub
+    @warn "Function is not submodular! Found $violations violations out of $total_tests tests."
+end
+```
+
+**Important**: The `is_submodular()` function has O(n² × 2ⁿ) complexity and is only practical for small problems (n ≤ 10). For larger functions, submodularity must be verified theoretically or through sampling.
+
+### Solution Verification with `is_minimiser()`
+
+The `is_minimiser()` function provides an efficient O(n) method to verify whether a given solution is optimal for any submodular function, regardless of problem size:
+
+```julia
+f = ConcaveSubmodularFunction(20, 0.7)
+
+# Get algorithm result
+S_alg, val_alg = fujishige_wolfe_submodular_minimization(f)
+
+# Verify optimality (works for any n)
+is_optimal, improvement, better_val = is_minimiser(S_alg, f; verbose=true)
+
+if is_optimal
+    println("✓ Solution is globally optimal!")
+else
+    println("✗ Solution is not optimal. $improvement")
+    println("  Current value: $val_alg")
+    println("  Better value: $better_val")
+end
+```
+
+**Key advantages of `is_minimiser()`:**
+- **Scalable**: O(n) complexity vs O(2ⁿ) for brute force
+- **Works for any problem size**: No exponential growth like brute force
+- **Provides improvement hints**: When not optimal, suggests specific improvements
+- **Supports both input formats**: BitVector or Vector{Int} (indices of selected elements)
+
+```julia
+# Using Vector{Int} format (indices of selected elements)
+selected_elements = [1, 3, 5]  # Elements in the set
+is_optimal, improvement, better_val = is_minimiser(selected_elements, f, f.n)
+
+# Using BitVector format
+S = falses(f.n)
+S[[1, 3, 5]] .= true
+is_optimal, improvement, better_val = is_minimiser(S, f)
+```
+
+### Brute Force Verification
+
+For small problems, you can verify the correctness of the algorithm using brute force search:
+
+```julia
+f = ConcaveSubmodularFunction(6, 0.7)
+
+# Algorithm result
+S_alg, val_alg = fujishige_wolfe_submodular_minimization(f)
+
+# Brute force verification (for n ≤ 20)
+S_bf, val_bf = brute_force_minimization(f)
+
+# Compare results
+println("Algorithm: value = $val_alg, set = $(findall(S_alg))")
+println("Brute force: value = $val_bf, set = $(findall(S_bf))")
+println("Match: $(abs(val_alg - val_bf) < COMPARISON_TOLERANCE)")
+
+# Verify both solutions are optimal
+println("Algorithm optimal: $(is_minimiser(S_alg, f)[1])")
+println("Brute force optimal: $(is_minimiser(S_bf, f)[1])")
 ```
 
 ## Example Functions
@@ -287,14 +378,14 @@ SubmodularMinimization.jl/
 │   ├── oracles.jl                        # Linear optimization and affine minimization
 │   ├── algorithms.jl                     # Fujishige-Wolfe implementation
 │   └── utils.jl                          # Utilities and testing functions
-├── test/                                  # Comprehensive test suite (969 tests)
+├── test/                                  # Comprehensive test suite (2,980 tests)
 └── test_verbose.jl                       # Verbose test runner
 ```
 
 ## Testing
 
 ```bash
-# Run full test suite (969 tests)
+# Run full test suite (2,980 tests)
 julia test/runtests.jl
 
 # Verbose testing with progress output
@@ -326,7 +417,7 @@ If you use this package in your research, please refer to this GitHub repository
 Contributions are welcome! Please see our contributing guidelines and ensure all tests pass:
 
 ```bash
-julia test/runtests.jl      # All 969 tests must pass
+julia test/runtests.jl      # All 2,980 tests must pass
 julia performance_analysis.jl  # Performance regression check
 ```
 
