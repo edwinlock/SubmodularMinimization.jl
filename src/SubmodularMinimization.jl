@@ -90,6 +90,12 @@ include("algorithms.jl")
 # Testing and utility functions
 include("utils.jl")
 
+# Caching infrastructure
+include("caching.jl")
+
+# Python interface (C-compatible functions)
+include("python_interface.jl")
+
 # ============================================================================
 # TOLERANCE CONSTANTS
 # ============================================================================
@@ -161,6 +167,10 @@ export wolfe_algorithm!, fujishige_wolfe_submodular_minimization!
 # Export utilities
 export brute_force_minimization, brute_force_minimization_verbose, test_fujishige_wolfe
 export benchmark_implementation, test_implementation, is_submodular, is_minimiser
+
+# Export caching functionality
+export CachedSubmodularFunction, cached, enable_caching
+export cache_stats, clear_cache!, resize_cache!, auto_cache_recommendation
 
 # Export tolerance constants
 export DEFAULT_TOLERANCE, LOOSE_TOLERANCE, TIGHT_TOLERANCE, COMPARISON_TOLERANCE, NUMERICAL_PRECISION_TOLERANCE

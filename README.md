@@ -44,6 +44,26 @@ The package provides multiple interfaces for different use cases:
 | `is_submodular()` | Check if a function is submodular using Definition 3 | Validation, debugging (exponential time) |
 | `is_minimiser()` | Check if a given set is optimal for a submodular function | Solution verification (any n) |
 
+## Function Caching
+
+All algorithms support optional memoization for functions with high evaluation costs:
+
+```julia
+# Caching disabled by default (optimal for most cases)
+result = fujishige_wolfe_submodular_minimization(f; cache=false)
+
+# Enable caching for expensive functions with redundant evaluations
+result = fujishige_wolfe_submodular_minimization(f; cache=true)
+
+# Manual cache management for specialized use cases
+cached_f = cached(f; max_cache_size=1000)  # Bounded cache
+result = fujishige_wolfe_submodular_minimization(cached_f; cache=false)
+
+# Cache statistics
+stats = cache_stats(cached_f)
+println("Hit rate: $(stats.hit_rate)")
+```
+
 ## Tolerances
 
 The package provides standardized tolerance constants for consistent numerical behavior:

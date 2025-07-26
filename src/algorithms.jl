@@ -346,12 +346,23 @@ end
 Convenience wrapper for wolfe_algorithm! that automatically creates and manages workspace.
 For better performance when calling multiple times, create a WolfeWorkspace and use wolfe_algorithm! directly.
 """
-function wolfe_algorithm(f::SubmodularFunction; ε::Float64=DEFAULT_TOLERANCE, max_iterations::Int=10000, verbose::Bool=false)
-    n = ground_set_size(f)
+function wolfe_algorithm(f::SubmodularFunction; ε::Float64=DEFAULT_TOLERANCE, max_iterations::Int=10000, verbose::Bool=false, cache::Bool=false, max_cache_size::Int=0)
+    # Optionally wrap function with caching
+    working_f = cache ? CachedSubmodularFunction(f; max_cache_size=max_cache_size) : f
+    
+    n = ground_set_size(working_f)
     # Use a much larger max_vertices to handle worst-case scenarios
     # In the worst case, the algorithm might need up to max_iterations+1 vertices
     workspace = WolfeWorkspace(n, max_iterations+1)
-    return wolfe_algorithm!(workspace, f; ε=ε, max_iterations=max_iterations, verbose=verbose)
+    result = wolfe_algorithm!(workspace, working_f; ε=ε, max_iterations=max_iterations, verbose=verbose)
+    
+    # Add cache statistics if caching was enabled
+    if cache && verbose && isa(working_f, CachedSubmodularFunction)
+        stats = cache_stats(working_f)
+        println("Cache performance: $(stats.hits) hits, $(stats.misses) misses, $(round(stats.hit_rate*100, digits=1))% hit rate")
+    end
+    
+    return result
 end
 
 """
@@ -360,10 +371,21 @@ end
 Convenience wrapper for fujishige_wolfe_submodular_minimization! that automatically creates and manages workspace.
 For better performance when calling multiple times, create a WolfeWorkspace and use fujishige_wolfe_submodular_minimization! directly.
 """
-function fujishige_wolfe_submodular_minimization(f::SubmodularFunction; ε::Float64=DEFAULT_TOLERANCE, max_iterations::Int=10000, verbose::Bool=false)
-    n = ground_set_size(f)
+function fujishige_wolfe_submodular_minimization(f::SubmodularFunction; ε::Float64=DEFAULT_TOLERANCE, max_iterations::Int=10000, verbose::Bool=false, cache::Bool=false, max_cache_size::Int=0)
+    # Optionally wrap function with caching
+    working_f = cache ? CachedSubmodularFunction(f; max_cache_size=max_cache_size) : f
+    
+    n = ground_set_size(working_f)
     # Use a much larger max_vertices to handle worst-case scenarios
     # In the worst case, the algorithm might need up to max_iterations vertices
     workspace = WolfeWorkspace(n, max_iterations)
-    return fujishige_wolfe_submodular_minimization!(workspace, f; ε=ε, max_iterations=max_iterations, verbose=verbose)
+    result = fujishige_wolfe_submodular_minimization!(workspace, working_f; ε=ε, max_iterations=max_iterations, verbose=verbose)
+    
+    # Add cache statistics if caching was enabled
+    if cache && verbose && isa(working_f, CachedSubmodularFunction)
+        stats = cache_stats(working_f)
+        println("Cache performance: $(stats.hits) hits, $(stats.misses) misses, $(round(stats.hit_rate*100, digits=1))% hit rate")
+    end
+    
+    return result
 end

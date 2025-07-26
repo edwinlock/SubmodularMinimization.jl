@@ -249,8 +249,10 @@ is_sub, violations, total = is_submodular(f_feat; verbose=true)
 This function has O(n² × 2ⁿ) complexity. For large n, this may take considerable time.
 Consider sampling-based approaches for very large problems.
 """
-function is_submodular(f::SubmodularFunction; tolerance::Float64=COMPARISON_TOLERANCE, verbose::Bool=false)
-    n = ground_set_size(f)
+function is_submodular(f::SubmodularFunction; tolerance::Float64=COMPARISON_TOLERANCE, verbose::Bool=false, cache::Bool=true)
+    # Use caching for this function since it evaluates many subsets
+    working_f = cache ? CachedSubmodularFunction(f; max_cache_size=0) : f
+    n = ground_set_size(working_f)
     
     violations = 0
     total_tests = 0
@@ -286,10 +288,10 @@ function is_submodular(f::SubmodularFunction; tolerance::Float64=COMPARISON_TOLE
                 X_union_x1_x2[x2] = true
                 
                 # Evaluate the function on all four sets
-                f_X = evaluate(f, X)
-                f_X_x1 = evaluate(f, X_union_x1)
-                f_X_x2 = evaluate(f, X_union_x2)
-                f_X_x1_x2 = evaluate(f, X_union_x1_x2)
+                f_X = evaluate(working_f, X)
+                f_X_x1 = evaluate(working_f, X_union_x1)
+                f_X_x2 = evaluate(working_f, X_union_x2)
+                f_X_x1_x2 = evaluate(working_f, X_union_x1_x2)
                 
                 # Check the submodularity inequality
                 left_side = f_X_x1 + f_X_x2
@@ -326,6 +328,11 @@ function is_submodular(f::SubmodularFunction; tolerance::Float64=COMPARISON_TOLE
         println("  Violations: $violations")
         println("  Success rate: $(round(100 * (total_tests - violations) / total_tests, digits=2))%")
         println("  Result: $(is_submodular_result ? "SUBMODULAR ✓" : "NOT SUBMODULAR ✗")")
+        
+        if cache && isa(working_f, CachedSubmodularFunction)
+            stats = cache_stats(working_f)
+            println("  Cache performance: $(stats.hits) hits, $(stats.misses) misses, $(round(stats.hit_rate*100, digits=1))% hit rate")
+        end
     end
     
     return is_submodular_result, violations, total_tests
@@ -368,14 +375,16 @@ is_opt, improvement, better_val = is_minimiser(S_bad, f; verbose=true)
 This method assumes the function is submodular. For non-submodular functions,
 passing this test does not guarantee global optimality.
 """
-function is_minimiser(S::BitVector, f::SubmodularFunction; tolerance::Float64=COMPARISON_TOLERANCE, verbose::Bool=false)
-    n = ground_set_size(f)
+function is_minimiser(S::BitVector, f::SubmodularFunction; tolerance::Float64=COMPARISON_TOLERANCE, verbose::Bool=false, cache::Bool=true)
+    # Use caching since this function may evaluate multiple subsets
+    working_f = cache ? CachedSubmodularFunction(f; max_cache_size=0) : f
+    n = ground_set_size(working_f)
     
     if length(S) != n
         error("Candidate set length $(length(S)) does not match ground set size $n")
     end
     
-    f_S = evaluate(f, S)
+    f_S = evaluate(working_f, S)
     
     if verbose
         println("Checking optimality of set $(findall(S)) with value $f_S...")
@@ -386,7 +395,7 @@ function is_minimiser(S::BitVector, f::SubmodularFunction; tolerance::Float64=CO
         if !S[v]  # v not in S
             S_plus_v = copy(S)
             S_plus_v[v] = true
-            f_S_plus_v = evaluate(f, S_plus_v)
+            f_S_plus_v = evaluate(working_f, S_plus_v)
             
             if f_S_plus_v < f_S - tolerance
                 improvement_msg = "Can improve by adding element $v"
@@ -406,7 +415,7 @@ function is_minimiser(S::BitVector, f::SubmodularFunction; tolerance::Float64=CO
         if S[v]  # v in S
             S_minus_v = copy(S)
             S_minus_v[v] = false
-            f_S_minus_v = evaluate(f, S_minus_v)
+            f_S_minus_v = evaluate(working_f, S_minus_v)
             
             if f_S_minus_v < f_S - tolerance
                 improvement_msg = "Can improve by removing element $v"
@@ -424,6 +433,11 @@ function is_minimiser(S::BitVector, f::SubmodularFunction; tolerance::Float64=CO
     if verbose
         println("  ✓ No improvements found - S is locally optimal")
         println("  ✓ For submodular functions, local optimality ⟹ global optimality")
+        
+        if cache && isa(working_f, CachedSubmodularFunction)
+            stats = cache_stats(working_f)
+            println("  Cache performance: $(stats.hits) hits, $(stats.misses) misses, $(round(stats.hit_rate*100, digits=1))% hit rate")
+        end
     end
     
     return true, "", NaN
