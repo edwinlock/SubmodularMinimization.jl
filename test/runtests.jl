@@ -6,6 +6,7 @@ This file runs all test suites following Julia best practices.
 
 using Test
 using SubmodularMinimization
+using Statistics
 
 @testset "SubmodularMinimization.jl Tests" begin
     # Core functionality tests
