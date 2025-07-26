@@ -40,8 +40,8 @@ The package provides multiple interfaces for different use cases:
 | `fujishige_wolfe_submodular_minimization()` | Complete submodular minimization with automatic workspace | General use, convenient interface |
 | `fujishige_wolfe_submodular_minimization!()` | Pre-allocated workspace version | Performance-critical, minimal allocations |  
 | `wolfe_algorithm()` / `wolfe_algorithm!()` | Wolfe algorithm for any polytope | Custom oracles, general convex optimization |
-| `brute_force_minimization()` | Exhaustive search (2^n evaluations) | Testing, verification (n ≤ 20) |
-| `is_submodular()` | Check if a function is submodular using Definition 3 | Validation, debugging (n ≤ 10) |
+| `brute_force_minimization()` | Exhaustive search (2^n evaluations) | Testing, verification (exponential time) |
+| `is_submodular()` | Check if a function is submodular using Definition 3 | Validation, debugging (exponential time) |
 | `is_minimiser()` | Check if a given set is optimal for a submodular function | Solution verification (any n) |
 
 ## Tolerances
@@ -105,7 +105,7 @@ if !is_sub
 end
 ```
 
-**Important**: The `is_submodular()` function has O(n² × 2ⁿ) complexity and is only practical for small problems (n ≤ 10). For larger functions, submodularity must be verified theoretically or through sampling.
+**Important**: The `is_submodular()` function has O(n² × 2ⁿ) complexity and may take considerable time for large problems. For very large functions, consider theoretical verification or sampling approaches.
 
 ### Solution Verification with `is_minimiser()`
 
@@ -133,14 +133,9 @@ end
 - **Scalable**: O(n) complexity vs O(2ⁿ) for brute force
 - **Works for any problem size**: No exponential growth like brute force
 - **Provides improvement hints**: When not optimal, suggests specific improvements
-- **Supports both input formats**: BitVector or Vector{Int} (indices of selected elements)
 
 ```julia
-# Using Vector{Int} format (indices of selected elements)
-selected_elements = [1, 3, 5]  # Elements in the set
-is_optimal, improvement, better_val = is_minimiser(selected_elements, f, f.n)
-
-# Using BitVector format
+# Create BitVector for the set {1, 3, 5}
 S = falses(f.n)
 S[[1, 3, 5]] .= true
 is_optimal, improvement, better_val = is_minimiser(S, f)
@@ -156,7 +151,7 @@ f = ConcaveSubmodularFunction(6, 0.7)
 # Algorithm result
 S_alg, val_alg = fujishige_wolfe_submodular_minimization(f)
 
-# Brute force verification (for n ≤ 20)
+# Brute force verification (exponential time)
 S_bf, val_bf = brute_force_minimization(f)
 
 # Compare results
@@ -349,8 +344,6 @@ x_min_norm = wolfe_algorithm(flow_oracle, num_edges)[1]
 - **Memory**: O(n²) for storing active vertices (configurable)
 - **Numerical Stability**: Built-in safeguards for ill-conditioned problems
 
-This makes the package useful for a much broader class of optimization problems beyond submodular functions.
-
 ## Advanced Usage
 
 ### Performance-Critical Applications
@@ -389,7 +382,7 @@ SubmodularMinimization.jl/
 
 ```bash
 # Run full test suite (2,980 tests)
-julia test/runtests.jl
+julia --project -e "using Pkg; Pkg.test()"
 
 # Verbose testing with progress output
 julia test_verbose.jl
@@ -420,8 +413,8 @@ If you use this package in your research, please refer to this GitHub repository
 Contributions are welcome! Please see our contributing guidelines and ensure all tests pass:
 
 ```bash
-julia test/runtests.jl      # All 2,980 tests must pass
-julia performance_analysis.jl  # Performance regression check
+julia --project -e "using Pkg; Pkg.test()"  # All 2,980 tests must pass
+julia performance_analysis.jl               # Performance regression check
 ```
 
 ## License

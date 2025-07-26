@@ -15,9 +15,6 @@ Returns (S_min, min_value) where S_min is the minimizing set and min_value is th
 """
 function brute_force_minimization(f::SubmodularFunction)
     n = ground_set_size(f)
-    if n > 20
-        error("Brute force only for n ≤ 20 due to computational complexity (2^$n evaluations required)")
-    end
     
     min_value = Inf
     S_min = falses(n)
@@ -49,9 +46,6 @@ Useful for debugging and understanding the search space.
 """
 function brute_force_minimization_verbose(f::SubmodularFunction; show_progress::Bool=true)
     n = ground_set_size(f)
-    if n > 20
-        error("Brute force only for n ≤ 20 due to computational complexity (2^$n evaluations required)")
-    end
     
     min_value = Inf
     S_min = falses(n)
@@ -252,15 +246,11 @@ is_sub, violations, total = is_submodular(f_feat; verbose=true)
 ```
 
 ## Note
-This function has O(n² × 2ⁿ) complexity and is only practical for small n (≤ 10).
-For larger functions, consider sampling-based approaches.
+This function has O(n² × 2ⁿ) complexity. For large n, this may take considerable time.
+Consider sampling-based approaches for very large problems.
 """
 function is_submodular(f::SubmodularFunction; tolerance::Float64=COMPARISON_TOLERANCE, verbose::Bool=false)
     n = ground_set_size(f)
-    
-    if n > 15
-        @warn "is_submodular() has O(n² × 2ⁿ) complexity. For n=$n, this requires $(n^2 * 2^n) operations. Consider n ≤ 10 for practical use."
-    end
     
     violations = 0
     total_tests = 0
@@ -439,29 +429,3 @@ function is_minimiser(S::BitVector, f::SubmodularFunction; tolerance::Float64=CO
     return true, "", NaN
 end
 
-"""
-    is_minimiser(S::Vector{Int}, f::SubmodularFunction; kwargs...)
-
-Convenience method that accepts a vector of indices instead of a BitVector.
-
-## Example
-```julia
-f = ConcaveSubmodularFunction(4, 0.5)
-is_opt, improvement, better_val = is_minimiser(Int[], f)  # Empty set
-# Output: true, "", NaN
-
-is_opt, improvement, better_val = is_minimiser([1, 2], f)  # Set {1, 2}
-# Output: false, "Can improve by removing element 1", <better_value>
-```
-"""
-function is_minimiser(S_indices::Vector{Int}, f::SubmodularFunction; kwargs...)
-    n = ground_set_size(f)
-    S = falses(n)
-    for i in S_indices
-        if i < 1 || i > n
-            error("Index $i is out of bounds for ground set size $n")
-        end
-        S[i] = true
-    end
-    return is_minimiser(S, f; kwargs...)
-end
